@@ -126,16 +126,22 @@ set(TOKENIZERS_CPP_INCLUDE ${TOKENIZERS_CPP_ROOT}/include)
 
 # Build the rust library early. This custom command builds libtokenizers_c.a
 # and then copies it into the current binary directory.
+# Ensure the output directory exists before building.
 add_custom_command(
     OUTPUT ${TOKENIZERS_RUST_LIB}
+    # Create the expected output directory.
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${TOKENIZERS_CPP_CARGO_BINARY_DIR}"
+    # Run cargo build using the specified environment.
     COMMAND ${CMAKE_COMMAND} -E env
         CARGO_TARGET_DIR=${TOKENIZERS_CPP_CARGO_TARGET_DIR}
         ${CARGO_EXTRA_ENVS}
         RUSTFLAGS="${TOKENIZERS_CPP_RUST_FLAGS}"
         cargo build ${TOKENIZERS_CPP_CARGO_FLAGS}
+    # Copy the generated library into the expected location.
     COMMAND ${CMAKE_COMMAND} -E copy
-        ${TOKENIZERS_RUST_LIB} "${CMAKE_CURRENT_BINARY_DIR}"
-    WORKING_DIRECTORY ${TOKENIZERS_CPP_CARGO_SOURCE_PATH}
+        "${TOKENIZERS_RUST_LIB}"
+        "${CMAKE_CURRENT_BINARY_DIR}"
+    WORKING_DIRECTORY "${TOKENIZERS_CPP_CARGO_SOURCE_PATH}"
 )
 
 # Instead of defining tokenizers_c twice, we now declare it only once as
