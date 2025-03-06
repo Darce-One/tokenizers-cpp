@@ -18,53 +18,58 @@ set(CARGO_EXTRA_ENVS "")
 message(STATUS "system-name" ${CMAKE_SYSTEM_NAME})
 
 if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
-  list(APPEND TOKENIZERS_C_LINK_LIBS ${CMAKE_DL_LIBS})
+    list(APPEND TOKENIZERS_C_LINK_LIBS ${CMAKE_DL_LIBS})
+
 elseif (CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
-  set(TOKENIZERS_CPP_CARGO_TARGET wasm32-unknown-emscripten)
+    set(TOKENIZERS_CPP_CARGO_TARGET wasm32-unknown-emscripten)
+
 elseif (CMAKE_SYSTEM_NAME STREQUAL "iOS")
-  if (CMAKE_OSX_SYSROOT MATCHES ".*iPhoneSimulator\\.platform.*")
-    if(CMAKE_OSX_ARCHITECTURES MATCHES "x86_64")
-      set(TOKENIZERS_CPP_CARGO_TARGET x86_64-apple-ios)
+    if (CMAKE_OSX_SYSROOT MATCHES ".*iPhoneSimulator\\.platform.*")
+        if(CMAKE_OSX_ARCHITECTURES MATCHES "x86_64")
+            set(TOKENIZERS_CPP_CARGO_TARGET x86_64-apple-ios)
+        else ()
+            set(TOKENIZERS_CPP_CARGO_TARGET aarch64-apple-ios-sim)
+        endif ()
     else ()
-      set(TOKENIZERS_CPP_CARGO_TARGET aarch64-apple-ios-sim)
+        set(TOKENIZERS_CPP_CARGO_TARGET aarch64-apple-ios)
     endif ()
-  else ()
-    set(TOKENIZERS_CPP_CARGO_TARGET aarch64-apple-ios)
-  endif ()
-  # add extra dependency needed for rust tokenizer in iOS
-  find_library(FOUNDATION_LIB Foundation)
-  find_library(SECURITY_LIB Security)
-  list(APPEND TOKENIZERS_C_LINK_LIBS ${FOUNDATION_LIB} ${SECURITY_LIB})
+    # add extra dependency needed for rust tokenizer in iOS
+    find_library(FOUNDATION_LIB Foundation)
+    find_library(SECURITY_LIB Security)
+    list(APPEND TOKENIZERS_C_LINK_LIBS ${FOUNDATION_LIB} ${SECURITY_LIB})
+
 elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin")
-  if (CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-    set(TOKENIZERS_CPP_CARGO_TARGET aarch64-apple-darwin)
-  endif()
-  if (CMAKE_OSX_DEPLOYMENT_TARGET)
-    set(CARGO_EXTRA_ENVS
+    if (CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+        set(TOKENIZERS_CPP_CARGO_TARGET aarch64-apple-darwin)
+    endif()
+    if (CMAKE_OSX_DEPLOYMENT_TARGET)
+        set(CARGO_EXTRA_ENVS
       MACOSX_DEPLOYMENT_TARGET=${CMAKE_OSX_DEPLOYMENT_TARGET}
     )
-  endif()
+    endif()
+
 elseif (CMAKE_SYSTEM_NAME STREQUAL "Android")
-  if (ANDROID_ABI STREQUAL "arm64-v8a")
-    set(TOKENIZERS_CPP_CARGO_TARGET aarch64-linux-android)
-  elseif (ANDROID_ABI STREQUAL "armeabi-v7a")
-    set(TOKENIZERS_CPP_CARGO_TARGET armv7-linux-androideabi)
-  elseif (ANDROID_ABI STREQUAL "x86_64")
-    set(TOKENIZERS_CPP_CARGO_TARGET x86_64-linux-android)
-  elseif (ANDROID_ABI STREQUAL "x86")
-    set(TOKENIZERS_CPP_CARGO_TARGET i686-linux-android)
-  endif()
-  set(CARGO_EXTRA_ENVS
+    if (ANDROID_ABI STREQUAL "arm64-v8a")
+        set(TOKENIZERS_CPP_CARGO_TARGET aarch64-linux-android)
+    elseif (ANDROID_ABI STREQUAL "armeabi-v7a")
+        set(TOKENIZERS_CPP_CARGO_TARGET armv7-linux-androideabi)
+    elseif (ANDROID_ABI STREQUAL "x86_64")
+        set(TOKENIZERS_CPP_CARGO_TARGET x86_64-linux-android)
+    elseif (ANDROID_ABI STREQUAL "x86")
+        set(TOKENIZERS_CPP_CARGO_TARGET i686-linux-android)
+    endif()
+    set(CARGO_EXTRA_ENVS
     AR_${TOKENIZERS_CPP_CARGO_TARGET}=${ANDROID_TOOLCHAIN_ROOT}/bin/llvm-ar
     CC_${TOKENIZERS_CPP_CARGO_TARGET}=${ANDROID_TOOLCHAIN_ROOT}/bin/${TOKENIZERS_CPP_CARGO_TARGET}${ANDROID_NATIVE_API_LEVEL}-clang
     CXX_${TOKENIZERS_CPP_CARGO_TARGET}=${ANDROID_TOOLCHAIN_ROOT}/bin/${TOKENIZERS_CPP_CARGO_TARGET}${ANDROID_NATIVE_API_LEVEL}-clang++
   )
+
 elseif (CMAKE_SYSTEM_NAME STREQUAL "Windows")
-  set(TOKENIZERS_CPP_CARGO_TARGET x86_64-pc-windows-msvc)
+    set(TOKENIZERS_CPP_CARGO_TARGET x86_64-pc-windows-msvc)
 endif()
 
 if(WIN32)
-  list(APPEND TOKENIZERS_C_LINK_LIBS
+    list(APPEND TOKENIZERS_C_LINK_LIBS
     ntdll wsock32 ws2_32 Bcrypt
     iphlpapi userenv psapi
   )
@@ -80,12 +85,26 @@ if (NOT TOKENIZERS_CPP_CARGO_TARGET STREQUAL "")
         "${TOKENIZERS_CPP_CARGO_BINARY_DIR}/${TOKENIZERS_CPP_CARGO_TARGET}")
 endif()
 
-if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-    set(TOKENIZERS_CPP_CARGO_BINARY_DIR "${TOKENIZERS_CPP_CARGO_BINARY_DIR}/debug")
-else ()
+option(TOKENIZERS_CARGO_RELEASE
+  "Build the cargo (Rust) library in release mode (will append --release)" OFF)
+
+set(TOKENIZERS_CPP_CARGO_FLAGS "")
+set(TOKENIZERS_CPP_CARGO_TARGET_DIR ${CMAKE_CURRENT_BINARY_DIR})
+set(TOKENIZERS_CPP_CARGO_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR})
+
+if (NOT TOKENIZERS_CPP_CARGO_TARGET STREQUAL "")
+    list(APPEND TOKENIZERS_CPP_CARGO_FLAGS --target ${TOKENIZERS_CPP_CARGO_TARGET})
+    set(TOKENIZERS_CPP_CARGO_BINARY_DIR
+        "${TOKENIZERS_CPP_CARGO_BINARY_DIR}/${TOKENIZERS_CPP_CARGO_TARGET}")
+endif()
+
+if (TOKENIZERS_CARGO_RELEASE)
     list(APPEND TOKENIZERS_CPP_CARGO_FLAGS --release)
     set(TOKENIZERS_CPP_CARGO_BINARY_DIR "${TOKENIZERS_CPP_CARGO_BINARY_DIR}/release")
-endif ()
+else()
+    set(TOKENIZERS_CPP_CARGO_BINARY_DIR "${TOKENIZERS_CPP_CARGO_BINARY_DIR}/debug")
+endif()
+
 
 get_filename_component(TOKENIZERS_CPP_ROOT ${CMAKE_CURRENT_LIST_FILE} DIRECTORY)
 set(TOKENIZERS_CPP_CARGO_SOURCE_PATH ${TOKENIZERS_CPP_ROOT}/rust)
@@ -96,9 +115,9 @@ add_subdirectory(msgpack)
 option(MLC_ENABLE_SENTENCEPIECE_TOKENIZER "Enable SentencePiece tokenizer" ON)
 
 if(MSVC)
-  set(TOKENIZERS_RUST_LIB "${TOKENIZERS_CPP_CARGO_BINARY_DIR}/tokenizers_c.lib")
+    set(TOKENIZERS_RUST_LIB "${TOKENIZERS_CPP_CARGO_BINARY_DIR}/tokenizers_c.lib")
 else()
-  set(TOKENIZERS_RUST_LIB "${TOKENIZERS_CPP_CARGO_BINARY_DIR}/libtokenizers_c.a")
+    set(TOKENIZERS_RUST_LIB "${TOKENIZERS_CPP_CARGO_BINARY_DIR}/libtokenizers_c.a")
 endif()
 set(TOKENIZERS_CPP_INCLUDE ${TOKENIZERS_CPP_ROOT}/include)
 
@@ -128,7 +147,7 @@ target_include_directories(tokenizer_cpp_objs PRIVATE sentencepiece/src)
 target_include_directories(tokenizer_cpp_objs PRIVATE msgpack/include)
 target_include_directories(tokenizer_cpp_objs PUBLIC ${TOKENIZERS_CPP_INCLUDE})
 if (MLC_ENABLE_SENTENCEPIECE_TOKENIZER STREQUAL "ON")
-  target_compile_definitions(tokenizer_cpp_objs PUBLIC MLC_ENABLE_SENTENCEPIECE_TOKENIZER)
+    target_compile_definitions(tokenizer_cpp_objs PUBLIC MLC_ENABLE_SENTENCEPIECE_TOKENIZER)
 endif ()
 target_link_libraries(tokenizer_cpp_objs PRIVATE msgpack-cxx)
 
@@ -139,10 +158,10 @@ option(SPM_ENABLE_TCMALLOC "" OFF)
 # it is OK to skip those since we do not provide these apps in the ios
 # instead just link to the sentencepiece directly
 if (CMAKE_SYSTEM_NAME STREQUAL "iOS")
-  macro (set_xcode_property TARGET XCODE_PROPERTY XCODE_VALUE)
-      set_property (TARGET ${TARGET} PROPERTY
+    macro (set_xcode_property TARGET XCODE_PROPERTY XCODE_VALUE)
+        set_property (TARGET ${TARGET} PROPERTY
           XCODE_ATTRIBUTE_${XCODE_PROPERTY} ${XCODE_VALUE})
-  endmacro (set_xcode_property)
+    endmacro (set_xcode_property)
 endif()
 add_subdirectory(sentencepiece sentencepiece EXCLUDE_FROM_ALL)
 
