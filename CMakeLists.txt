@@ -134,6 +134,8 @@ add_custom_command(
     WORKING_DIRECTORY ${TOKENIZERS_CPP_CARGO_SOURCE_PATH}
    )
 
+add_custom_target(tokenizers_cargo ALL DEPENDS ${TOKENIZERS_RUST_LIB})
+
 set(
   TOKENIZER_CPP_SRCS
   src/sentencepiece_tokenizer.cc
