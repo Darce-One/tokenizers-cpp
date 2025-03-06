@@ -134,7 +134,26 @@ add_custom_command(
     WORKING_DIRECTORY ${TOKENIZERS_CPP_CARGO_SOURCE_PATH}
    )
 
-add_custom_target(tokenizers_cargo ALL DEPENDS ${TOKENIZERS_RUST_LIB})
+# Instead of:
+#  add_library(tokenizers_c INTERFACE ${TOKENIZERS_RUST_LIB})
+#
+# (which attaches the libtokenizers_c.a file as a source to tokenizers_c)
+# do the following:
+
+# Declare an IMPORTED target for the Rust library
+add_library(tokenizers_c STATIC IMPORTED)
+# Tell CMake where to find the library once it’s built.
+set_target_properties(tokenizers_c PROPERTIES
+     IMPORTED_LOCATION "${TOKENIZERS_CPP_CARGO_BINARY_DIR}/libtokenizers_c.a"
+   )
+
+# Create a custom target that “drives” the cargo build. This target depends on the output file.
+add_custom_target(tokenizers_cargo ALL
+     DEPENDS "${TOKENIZERS_CPP_CARGO_BINARY_DIR}/libtokenizers_c.a"
+   )
+
+# Now make the imported tokenizers_c target depend on the cargo build.
+add_dependencies(tokenizers_c tokenizers_cargo)
 
 set(
   TOKENIZER_CPP_SRCS
