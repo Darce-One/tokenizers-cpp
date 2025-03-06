@@ -1,3 +1,4 @@
+# cmake_minimum_required and project settings
 cmake_minimum_required(VERSION 3.19...3.30)
 project(tokenizers_cpp C CXX)
 
@@ -15,7 +16,7 @@ set(TOKENIZERS_CPP_CARGO_TARGET "")
 set(TOKENIZERS_CPP_LINK_LIBS "")
 set(TOKENIZERS_C_LINK_LIBS "")
 set(CARGO_EXTRA_ENVS "")
-message(STATUS "system-name" ${CMAKE_SYSTEM_NAME})
+message(STATUS "system-name ${CMAKE_SYSTEM_NAME}")
 
 if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
     list(APPEND TOKENIZERS_C_LINK_LIBS ${CMAKE_DL_LIBS})
@@ -44,8 +45,8 @@ elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin")
     endif()
     if (CMAKE_OSX_DEPLOYMENT_TARGET)
         set(CARGO_EXTRA_ENVS
-      MACOSX_DEPLOYMENT_TARGET=${CMAKE_OSX_DEPLOYMENT_TARGET}
-    )
+            MACOSX_DEPLOYMENT_TARGET=${CMAKE_OSX_DEPLOYMENT_TARGET}
+        )
     endif()
 
 elseif (CMAKE_SYSTEM_NAME STREQUAL "Android")
@@ -59,10 +60,10 @@ elseif (CMAKE_SYSTEM_NAME STREQUAL "Android")
         set(TOKENIZERS_CPP_CARGO_TARGET i686-linux-android)
     endif()
     set(CARGO_EXTRA_ENVS
-    AR_${TOKENIZERS_CPP_CARGO_TARGET}=${ANDROID_TOOLCHAIN_ROOT}/bin/llvm-ar
-    CC_${TOKENIZERS_CPP_CARGO_TARGET}=${ANDROID_TOOLCHAIN_ROOT}/bin/${TOKENIZERS_CPP_CARGO_TARGET}${ANDROID_NATIVE_API_LEVEL}-clang
-    CXX_${TOKENIZERS_CPP_CARGO_TARGET}=${ANDROID_TOOLCHAIN_ROOT}/bin/${TOKENIZERS_CPP_CARGO_TARGET}${ANDROID_NATIVE_API_LEVEL}-clang++
-  )
+        AR_${TOKENIZERS_CPP_CARGO_TARGET}=${ANDROID_TOOLCHAIN_ROOT}/bin/llvm-ar
+        CC_${TOKENIZERS_CPP_CARGO_TARGET}=${ANDROID_TOOLCHAIN_ROOT}/bin/${TOKENIZERS_CPP_CARGO_TARGET}${ANDROID_NATIVE_API_LEVEL}-clang
+        CXX_${TOKENIZERS_CPP_CARGO_TARGET}=${ANDROID_TOOLCHAIN_ROOT}/bin/${TOKENIZERS_CPP_CARGO_TARGET}${ANDROID_NATIVE_API_LEVEL}-clang++
+    )
 
 elseif (CMAKE_SYSTEM_NAME STREQUAL "Windows")
     set(TOKENIZERS_CPP_CARGO_TARGET x86_64-pc-windows-msvc)
@@ -70,9 +71,9 @@ endif()
 
 if(WIN32)
     list(APPEND TOKENIZERS_C_LINK_LIBS
-    ntdll wsock32 ws2_32 Bcrypt
-    iphlpapi userenv psapi
-  )
+        ntdll wsock32 ws2_32 Bcrypt
+        iphlpapi userenv psapi
+    )
 endif()
 
 set(TOKENIZERS_CPP_CARGO_FLAGS "")
@@ -86,8 +87,9 @@ if (NOT TOKENIZERS_CPP_CARGO_TARGET STREQUAL "")
 endif()
 
 option(TOKENIZERS_CARGO_RELEASE
-  "Build the cargo (Rust) library in release mode (will append --release)" OFF)
+    "Build the cargo (Rust) library in release mode (will append --release)" OFF)
 
+# Reset cargo flags and directories
 set(TOKENIZERS_CPP_CARGO_FLAGS "")
 set(TOKENIZERS_CPP_CARGO_TARGET_DIR ${CMAKE_CURRENT_BINARY_DIR})
 set(TOKENIZERS_CPP_CARGO_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR})
@@ -105,7 +107,6 @@ else()
     set(TOKENIZERS_CPP_CARGO_BINARY_DIR "${TOKENIZERS_CPP_CARGO_BINARY_DIR}/debug")
 endif()
 
-
 get_filename_component(TOKENIZERS_CPP_ROOT ${CMAKE_CURRENT_LIST_FILE} DIRECTORY)
 set(TOKENIZERS_CPP_CARGO_SOURCE_PATH ${TOKENIZERS_CPP_ROOT}/rust)
 
@@ -114,47 +115,44 @@ add_subdirectory(msgpack)
 
 option(MLC_ENABLE_SENTENCEPIECE_TOKENIZER "Enable SentencePiece tokenizer" ON)
 
+# Choose the correct library file based on the compiler.
 if(MSVC)
     set(TOKENIZERS_RUST_LIB "${TOKENIZERS_CPP_CARGO_BINARY_DIR}/tokenizers_c.lib")
 else()
     set(TOKENIZERS_RUST_LIB "${TOKENIZERS_CPP_CARGO_BINARY_DIR}/libtokenizers_c.a")
 endif()
+
 set(TOKENIZERS_CPP_INCLUDE ${TOKENIZERS_CPP_ROOT}/include)
 
-# NOTE: need to use cmake -E env to be portable in win
+# Build the rust library early. This custom command builds libtokenizers_c.a
+# and then copies it into the current binary directory.
 add_custom_command(
     OUTPUT ${TOKENIZERS_RUST_LIB}
     COMMAND ${CMAKE_COMMAND} -E env
-    CARGO_TARGET_DIR=${TOKENIZERS_CPP_CARGO_TARGET_DIR}
-    ${CARGO_EXTRA_ENVS}
-    RUSTFLAGS="${TOKENIZERS_CPP_RUST_FLAGS}"
-    cargo build ${TOKENIZERS_CPP_CARGO_FLAGS}
+        CARGO_TARGET_DIR=${TOKENIZERS_CPP_CARGO_TARGET_DIR}
+        ${CARGO_EXTRA_ENVS}
+        RUSTFLAGS="${TOKENIZERS_CPP_RUST_FLAGS}"
+        cargo build ${TOKENIZERS_CPP_CARGO_FLAGS}
     COMMAND ${CMAKE_COMMAND} -E copy
-    ${TOKENIZERS_RUST_LIB} "${CMAKE_CURRENT_BINARY_DIR}"
+        ${TOKENIZERS_RUST_LIB} "${CMAKE_CURRENT_BINARY_DIR}"
     WORKING_DIRECTORY ${TOKENIZERS_CPP_CARGO_SOURCE_PATH}
-   )
+)
 
-# Instead of:
-#  add_library(tokenizers_c INTERFACE ${TOKENIZERS_RUST_LIB})
-#
-# (which attaches the libtokenizers_c.a file as a source to tokenizers_c)
-# do the following:
-
-# Declare an IMPORTED target for the Rust library
+# Instead of defining tokenizers_c twice, we now declare it only once as
+# an IMPORTED static library. That lets us force its build early (via dependency)
+# and reference the already-built library.
 add_library(tokenizers_c STATIC IMPORTED)
-# Tell CMake where to find the library once it’s built.
 set_target_properties(tokenizers_c PROPERTIES
-     IMPORTED_LOCATION "${TOKENIZERS_CPP_CARGO_BINARY_DIR}/libtokenizers_c.a"
-   )
-
-# Create a custom target that “drives” the cargo build. This target depends on the output file.
+    IMPORTED_LOCATION "${TOKENIZERS_CPP_CARGO_BINARY_DIR}/libtokenizers_c.a"
+)
+# Create a custom target to drive the cargo build.
 add_custom_target(tokenizers_cargo ALL
-     DEPENDS "${TOKENIZERS_CPP_CARGO_BINARY_DIR}/libtokenizers_c.a"
-   )
-
-# Now make the imported tokenizers_c target depend on the cargo build.
+    DEPENDS "${TOKENIZERS_CPP_CARGO_BINARY_DIR}/libtokenizers_c.a"
+)
+# Make sure the imported tokenizers_c target depends on the cargo build.
 add_dependencies(tokenizers_c tokenizers_cargo)
 
+# Build the C++ objects.
 set(
   TOKENIZER_CPP_SRCS
   src/sentencepiece_tokenizer.cc
@@ -167,26 +165,21 @@ target_include_directories(tokenizer_cpp_objs PRIVATE msgpack/include)
 target_include_directories(tokenizer_cpp_objs PUBLIC ${TOKENIZERS_CPP_INCLUDE})
 if (MLC_ENABLE_SENTENCEPIECE_TOKENIZER STREQUAL "ON")
     target_compile_definitions(tokenizer_cpp_objs PUBLIC MLC_ENABLE_SENTENCEPIECE_TOKENIZER)
-endif ()
+endif()
 target_link_libraries(tokenizer_cpp_objs PRIVATE msgpack-cxx)
 
-# sentencepiece config
+# SentencePiece configuration
 option(SPM_ENABLE_SHARED "override sentence piece config" OFF)
 option(SPM_ENABLE_TCMALLOC "" OFF)
-# provide macro if it does not exist in cmake system
-# it is OK to skip those since we do not provide these apps in the ios
-# instead just link to the sentencepiece directly
 if (CMAKE_SYSTEM_NAME STREQUAL "iOS")
-    macro (set_xcode_property TARGET XCODE_PROPERTY XCODE_VALUE)
-        set_property (TARGET ${TARGET} PROPERTY
-          XCODE_ATTRIBUTE_${XCODE_PROPERTY} ${XCODE_VALUE})
-    endmacro (set_xcode_property)
+    macro(set_xcode_property TARGET XCODE_PROPERTY XCODE_VALUE)
+        set_property(TARGET ${TARGET} PROPERTY
+            XCODE_ATTRIBUTE_${XCODE_PROPERTY} ${XCODE_VALUE})
+    endmacro()
 endif()
 add_subdirectory(sentencepiece sentencepiece EXCLUDE_FROM_ALL)
 
-add_library(tokenizers_c INTERFACE ${TOKENIZERS_RUST_LIB})
-target_link_libraries(tokenizers_c INTERFACE ${TOKENIZERS_RUST_LIB} ${TOKENIZERS_C_LINK_LIBS})
-
+# Now build our C/C++ library.
 add_library(tokenizers_cpp STATIC $<TARGET_OBJECTS:tokenizer_cpp_objs>)
 target_link_libraries(tokenizers_cpp PRIVATE tokenizers_c sentencepiece-static ${TOKENIZERS_CPP_LINK_LIBS})
 target_include_directories(tokenizers_cpp PUBLIC ${TOKENIZERS_CPP_INCLUDE})
